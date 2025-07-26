@@ -1386,8 +1386,351 @@ function checkBrowserCompatibility() {
     return warnings.length === 0;
 }
 
+// 議事録関連の要素
+const createMinutesBtn = document.getElementById('createMinutesBtn');
+const minutesModal = document.getElementById('minutesModal');
+const closeMinutesBtn = document.getElementById('closeMinutesBtn');
+const generateMinutesBtn = document.getElementById('generateMinutesBtn');
+const minutesPreview = document.getElementById('minutesPreview');
+const minutesContent = document.getElementById('minutesContent');
+const copyMinutesBtn = document.getElementById('copyMinutesBtn');
+const exportMinutesBtn = document.getElementById('exportMinutesBtn');
+const closePreviewBtn = document.getElementById('closePreviewBtn');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+
+// 議事録モデルとクライアントの初期化
+let minutesModel = null;
+let geminiClient = null;
+let currentMinutes = null;
+
+function initializeMinutesFeatures() {
+    minutesModel = new MinutesModel();
+    geminiClient = new GeminiClient();
+    
+    // APIキーの初期表示
+    const savedApiKey = ApiConfig.getApiKey();
+    if (savedApiKey) {
+        apiKeyInput.value = savedApiKey;
+    }
+}
+
+// ワンクリックで議事録を生成
+async function generateMinutesDirectly() {
+    // 自動的にデフォルト値を設定
+    const now = new Date();
+    const meetingInfo = {
+        meetingName: `会議録_${now.toLocaleDateString('ja-JP')}`,
+        date: now.toLocaleString('ja-JP'),
+        location: 'オンライン',
+        participants: '参加者リスト（後で編集してください）'
+    };
+    
+    const transcription = getAllText();
+    
+    // プログレス表示
+    createMinutesBtn.disabled = true;
+    createMinutesBtn.innerHTML = '<span class="material-icons">hourglass_empty</span>生成中...';
+    
+    try {
+        const generatedContent = await geminiClient.generateMinutes(transcription, meetingInfo);
+        
+        currentMinutes = minutesModel.createMinutes({
+            ...meetingInfo,
+            transcription,
+            generatedContent
+        });
+        
+        // 自動的に保存
+        minutesModel.updateMinutes(currentMinutes.id, {
+            status: 'final'
+        });
+        
+        // モーダルに表示
+        document.getElementById('meetingName').value = meetingInfo.meetingName;
+        document.getElementById('meetingDate').value = now.toISOString().slice(0, 16);
+        document.getElementById('meetingLocation').value = meetingInfo.location;
+        document.getElementById('meetingParticipants').value = meetingInfo.participants;
+        
+        minutesContent.textContent = generatedContent;
+        minutesPreview.classList.remove('hidden');
+        document.querySelector('.minutes-form').style.display = 'none';
+        minutesModal.classList.remove('hidden');
+        
+        showSuccess('議事録を生成・保存しました。');
+    } catch (error) {
+        showError(`議事録の生成に失敗しました: ${error.message}`);
+    } finally {
+        createMinutesBtn.disabled = false;
+        createMinutesBtn.innerHTML = '<span class="material-icons">article</span>議事録作成';
+    }
+}
+
+// APIキー保存
+saveApiKeyBtn.addEventListener('click', () => {
+    const apiKey = apiKeyInput.value.trim();
+    if (apiKey) {
+        ApiConfig.setApiKey(apiKey);
+        geminiClient.updateApiKey();
+        showSuccess('APIキーを保存しました。');
+    } else {
+        showError('APIキーを入力してください。');
+    }
+});
+
+// 議事録作成ボタン
+createMinutesBtn.addEventListener('click', async () => {
+    if (sessions.length === 0) {
+        showError('文字起こしデータがありません。録音を開始してください。');
+        return;
+    }
+    
+    if (!ApiConfig.isApiKeySet()) {
+        showError('APIキーが設定されていません。設定画面からAPIキーを入力してください。');
+        settingsModal.classList.remove('hidden');
+        return;
+    }
+    
+    // ワンクリックで議事録生成
+    await generateMinutesDirectly();
+});
+
+// 議事録生成
+generateMinutesBtn.addEventListener('click', async () => {
+    const meetingInfo = {
+        meetingName: document.getElementById('meetingName').value,
+        date: document.getElementById('meetingDate').value,
+        location: document.getElementById('meetingLocation').value,
+        participants: document.getElementById('meetingParticipants').value
+    };
+    
+    if (!meetingInfo.meetingName) {
+        showError('会議名を入力してください。');
+        return;
+    }
+    
+    const transcription = getAllText();
+    
+    generateMinutesBtn.disabled = true;
+    generateMinutesBtn.innerHTML = '<span class="material-icons">hourglass_empty</span>生成中...';
+    
+    try {
+        const generatedContent = await geminiClient.generateMinutes(transcription, meetingInfo);
+        
+        currentMinutes = minutesModel.createMinutes({
+            ...meetingInfo,
+            transcription,
+            generatedContent
+        });
+        
+        minutesContent.textContent = generatedContent;
+        minutesPreview.classList.remove('hidden');
+        document.querySelector('.minutes-form').style.display = 'none';
+        
+        showSuccess('議事録を生成しました。');
+    } catch (error) {
+        showError(`議事録の生成に失敗しました: ${error.message}`);
+    } finally {
+        generateMinutesBtn.disabled = false;
+        generateMinutesBtn.innerHTML = '<span class="material-icons">auto_awesome</span>AIで議事録生成';
+    }
+});
+
+// 議事録コピー
+copyMinutesBtn.addEventListener('click', () => {
+    if (currentMinutes) {
+        const text = minutesModel.exportAsText(currentMinutes);
+        navigator.clipboard.writeText(text)
+            .then(() => {
+                showSuccess('議事録をクリップボードにコピーしました。');
+            })
+            .catch(err => {
+                console.error('コピーに失敗:', err);
+                showError('コピーに失敗しました。');
+            });
+    }
+});
+
+// 議事録エクスポート
+const exportMenu = document.getElementById('exportMenu');
+
+exportMinutesBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    exportMenu.classList.toggle('hidden');
+});
+
+// エクスポートメニューの各オプション
+document.querySelectorAll('.export-option').forEach(button => {
+    button.addEventListener('click', (e) => {
+        const format = e.target.dataset.format;
+        exportMinutesAs(format);
+        exportMenu.classList.add('hidden');
+    });
+});
+
+// クリック外でメニューを閉じる
+document.addEventListener('click', () => {
+    exportMenu.classList.add('hidden');
+});
+
+// 議事録を指定形式でエクスポート
+async function exportMinutesAs(format) {
+    if (!currentMinutes) return;
+    
+    const fileName = `議事録_${currentMinutes.meetingInfo.meetingName}_${new Date().toISOString().slice(0, 10)}`;
+    
+    switch (format) {
+        case 'txt':
+            exportMinutesAsTxt(fileName);
+            break;
+        case 'docx':
+            await exportMinutesAsDocx(fileName);
+            break;
+        case 'pdf':
+            exportMinutesAsPdf(fileName);
+            break;
+        case 'md':
+            exportMinutesAsMarkdown(fileName);
+            break;
+    }
+    
+    showSuccess(`議事録を${format.toUpperCase()}形式でエクスポートしました。`);
+}
+
+// テキスト形式でエクスポート
+function exportMinutesAsTxt(fileName) {
+    const text = minutesModel.exportAsText(currentMinutes);
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    saveAs(blob, `${fileName}.txt`);
+}
+
+// Word形式でエクスポート
+async function exportMinutesAsDocx(fileName) {
+    const doc = new docx.Document({
+        sections: [{
+            properties: {},
+            children: [
+                new docx.Paragraph({
+                    text: currentMinutes.meetingInfo.meetingName,
+                    heading: docx.HeadingLevel.HEADING_1,
+                    spacing: { after: 300 }
+                }),
+                new docx.Paragraph({
+                    children: [
+                        new docx.TextRun({ text: "日時: ", bold: true }),
+                        new docx.TextRun(currentMinutes.meetingInfo.date)
+                    ]
+                }),
+                new docx.Paragraph({
+                    children: [
+                        new docx.TextRun({ text: "場所: ", bold: true }),
+                        new docx.TextRun(currentMinutes.meetingInfo.location)
+                    ]
+                }),
+                new docx.Paragraph({
+                    children: [
+                        new docx.TextRun({ text: "参加者: ", bold: true }),
+                        new docx.TextRun(currentMinutes.meetingInfo.participants)
+                    ],
+                    spacing: { after: 400 }
+                }),
+                ...currentMinutes.generatedContent.split('\n').map(line => 
+                    new docx.Paragraph({
+                        text: line,
+                        spacing: { after: 200 }
+                    })
+                )
+            ]
+        }]
+    });
+    
+    const blob = await docx.Packer.toBlob(doc);
+    saveAs(blob, `${fileName}.docx`);
+}
+
+// PDF形式でエクスポート
+function exportMinutesAsPdf(fileName) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+        unit: 'mm',
+        format: 'a4'
+    });
+    
+    // 日本語フォントの設定が必要な場合はここで行う
+    let yPosition = 20;
+    const margin = 15;
+    const lineHeight = 7;
+    const pageHeight = doc.internal.pageSize.height;
+    
+    // タイトル
+    doc.setFontSize(16);
+    doc.text(currentMinutes.meetingInfo.meetingName, margin, yPosition);
+    yPosition += lineHeight * 2;
+    
+    // 基本情報
+    doc.setFontSize(10);
+    doc.text(`日時: ${currentMinutes.meetingInfo.date}`, margin, yPosition);
+    yPosition += lineHeight;
+    doc.text(`場所: ${currentMinutes.meetingInfo.location}`, margin, yPosition);
+    yPosition += lineHeight;
+    doc.text(`参加者: ${currentMinutes.meetingInfo.participants}`, margin, yPosition);
+    yPosition += lineHeight * 2;
+    
+    // 本文
+    doc.setFontSize(11);
+    const lines = doc.splitTextToSize(currentMinutes.generatedContent, 180);
+    
+    lines.forEach(line => {
+        if (yPosition > pageHeight - margin) {
+            doc.addPage();
+            yPosition = margin;
+        }
+        doc.text(line, margin, yPosition);
+        yPosition += lineHeight;
+    });
+    
+    doc.save(`${fileName}.pdf`);
+}
+
+// Markdown形式でエクスポート
+function exportMinutesAsMarkdown(fileName) {
+    let markdown = `# ${currentMinutes.meetingInfo.meetingName}\n\n`;
+    markdown += `## 基本情報\n\n`;
+    markdown += `- **日時:** ${currentMinutes.meetingInfo.date}\n`;
+    markdown += `- **場所:** ${currentMinutes.meetingInfo.location}\n`;
+    markdown += `- **参加者:** ${currentMinutes.meetingInfo.participants}\n\n`;
+    markdown += `## 議事録内容\n\n`;
+    markdown += currentMinutes.generatedContent;
+    markdown += `\n\n---\n\n`;
+    markdown += `*作成日時: ${new Date(currentMinutes.createdAt).toLocaleString('ja-JP')}*\n`;
+    
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    saveAs(blob, `${fileName}.md`);
+}
+
+// プレビューを閉じる
+closePreviewBtn.addEventListener('click', () => {
+    minutesPreview.classList.add('hidden');
+    document.querySelector('.minutes-form').style.display = 'block';
+});
+
+// モーダルを閉じる
+closeMinutesBtn.addEventListener('click', () => {
+    minutesModal.classList.add('hidden');
+    minutesPreview.classList.add('hidden');
+    document.querySelector('.minutes-form').style.display = 'block';
+    currentMinutes = null;
+});
+
+minutesModal.addEventListener('click', (e) => {
+    if (e.target === minutesModal) {
+        closeMinutesBtn.click();
+    }
+});
+
 // 初期化
 checkBrowserCompatibility();
 loadSettings();
 initializeSpeechRecognition();
 loadFromLocalStorage();
+initializeMinutesFeatures();

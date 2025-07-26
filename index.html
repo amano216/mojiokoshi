@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self';">
+    <!-- CSPを一時的にコメントアウト。本番環境では適切に設定してください -->
+    <!-- <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com;"> -->
     <title>音声文字起こしツール</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
@@ -118,6 +119,10 @@
                         <span class="material-icons">add</span>
                         新規セッション
                     </button>
+                    <button class="action-btn primary" id="createMinutesBtn" aria-label="議事録作成">
+                        <span class="material-icons">article</span>
+                        議事録作成
+                    </button>
                 </div>
             </section>
         </main>
@@ -170,6 +175,16 @@
                         エクスポート時にタイムスタンプを含める
                     </label>
                     <input type="checkbox" id="includeTimestampsToggle" class="toggle-switch">
+                </div>
+                <div class="setting-item">
+                    <label for="apiKeyInput">
+                        <span class="material-icons">key</span>
+                        Gemini APIキー
+                    </label>
+                    <div class="api-key-container">
+                        <input type="password" id="apiKeyInput" class="api-key-input" placeholder="APIキーを入力">
+                        <button class="api-key-save-btn" id="saveApiKeyBtn">保存</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -232,9 +247,104 @@
 
     <div id="liveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
+    <div id="minutesModal" class="modal hidden">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2>議事録作成</h2>
+                <button class="close-btn" id="closeMinutesBtn" aria-label="閉じる">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="minutes-form">
+                    <div class="form-group">
+                        <label for="meetingName">
+                            <span class="material-icons">event</span>
+                            会議名
+                        </label>
+                        <input type="text" id="meetingName" class="form-input" placeholder="例: 月次定例会議">
+                    </div>
+                    <div class="form-group">
+                        <label for="meetingDate">
+                            <span class="material-icons">calendar_today</span>
+                            日時
+                        </label>
+                        <input type="datetime-local" id="meetingDate" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="meetingLocation">
+                            <span class="material-icons">place</span>
+                            場所
+                        </label>
+                        <input type="text" id="meetingLocation" class="form-input" placeholder="例: 会議室A または オンライン">
+                    </div>
+                    <div class="form-group">
+                        <label for="meetingParticipants">
+                            <span class="material-icons">people</span>
+                            参加者
+                        </label>
+                        <textarea id="meetingParticipants" class="form-textarea" rows="3" placeholder="例: 山田太郎、佐藤花子、鈴木一郎"></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button class="action-btn" id="generateMinutesBtn">
+                            <span class="material-icons">auto_awesome</span>
+                            AIで議事録生成
+                        </button>
+                    </div>
+                </div>
+                <div class="minutes-preview hidden" id="minutesPreview">
+                    <div class="preview-header">
+                        <h3>生成された議事録</h3>
+                    </div>
+                    <div class="preview-content" id="minutesContent" contenteditable="false"></div>
+                    <div class="preview-actions">
+                        <button class="action-btn" id="copyMinutesBtn">
+                            <span class="material-icons">content_copy</span>
+                            コピー
+                        </button>
+                        <div class="export-dropdown">
+                            <button class="action-btn" id="exportMinutesBtn">
+                                <span class="material-icons">download</span>
+                                エクスポート
+                            </button>
+                            <div class="export-menu hidden" id="exportMenu">
+                                <button class="export-option" data-format="txt">テキスト形式</button>
+                                <button class="export-option" data-format="docx">Word形式</button>
+                                <button class="export-option" data-format="pdf">PDF形式</button>
+                                <button class="export-option" data-format="md">Markdown形式</button>
+                            </div>
+                        </div>
+                        <button class="action-btn secondary" id="closePreviewBtn">
+                            <span class="material-icons">close</span>
+                            閉じる
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="minutesListModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>保存済み議事録</h2>
+                <button class="close-btn" id="closeMinutesListBtn" aria-label="閉じる">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="minutesList" class="minutes-list"></div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://unpkg.com/docx@7.8.2/build/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="config.js"></script>
+    <script src="api-config.js"></script>
+    <script src="gemini-client.js"></script>
+    <script src="minutes-model.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

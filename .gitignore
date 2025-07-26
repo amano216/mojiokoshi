@@ -1,0 +1,23 @@
+# 環境変数
+.env
+.env.local
+
+# API設定
+config.js
+
+# OS生成ファイル
+.DS_Store
+Thumbs.db
+
+# エディタ設定
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ログファイル
+*.log
+
+# 一時ファイル
+*.tmp
+*.temp
