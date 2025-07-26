@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self';">
+    <title>音声文字起こしツール</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>
+                <span class="material-icons">mic</span>
+                音声文字起こしツール
+            </h1>
+            <div class="header-buttons">
+                <a href="guide.html" class="icon-link" aria-label="使い方ガイド">
+                    <span class="material-icons">help_outline</span>
+                </a>
+                <button class="settings-btn" aria-label="設定">
+                    <span class="material-icons">settings</span>
+                </button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <section class="recording-area">
+                <button id="recordBtn" class="record-btn" aria-label="録音開始">
+                    <span class="material-icons record-icon">mic</span>
+                    <span class="record-text">録音開始</span>
+                </button>
+                <div class="recording-info">
+                    <div class="recording-time">録音時間: <span id="recordingTime">00:00</span></div>
+                    <div class="recording-status">状態: <span id="recordingStatus">待機中</span></div>
+                    <div class="noise-level hidden" id="noiseIndicator">
+                        <span class="material-icons">graphic_eq</span>
+                        ノイズレベル: <span id="noiseLevel">低</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="transcription-area">
+                <div class="transcription-header">
+                    <h2>文字起こし結果:</h2>
+                    <div class="header-actions">
+                        <button class="icon-btn" id="searchBtn" aria-label="検索・置換">
+                            <span class="material-icons">search</span>
+                        </button>
+                        <button class="icon-btn" id="undoBtn" aria-label="元に戻す">
+                            <span class="material-icons">undo</span>
+                        </button>
+                        <button class="icon-btn" id="redoBtn" aria-label="やり直す">
+                            <span class="material-icons">redo</span>
+                        </button>
+                        <div class="char-count">文字数: <span id="charCount">0</span></div>
+                    </div>
+                </div>
+                <div id="searchBox" class="search-box hidden">
+                    <div class="search-row">
+                        <input type="text" id="searchInput" placeholder="検索" class="search-input">
+                        <button id="searchPrevBtn" class="search-nav-btn" aria-label="前を検索">
+                            <span class="material-icons">keyboard_arrow_up</span>
+                        </button>
+                        <button id="searchNextBtn" class="search-nav-btn" aria-label="次を検索">
+                            <span class="material-icons">keyboard_arrow_down</span>
+                        </button>
+                        <span id="searchCount" class="search-count">0/0</span>
+                    </div>
+                    <div class="search-row">
+                        <input type="text" id="replaceInput" placeholder="置換" class="search-input">
+                        <button id="replaceBtn" class="search-action-btn">置換</button>
+                        <button id="replaceAllBtn" class="search-action-btn">すべて置換</button>
+                        <button id="closeSearchBtn" class="search-close-btn" aria-label="閉じる">
+                            <span class="material-icons">close</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="transcriptionResult" class="transcription-result" contenteditable="false">
+                    <div class="placeholder">録音を開始すると、ここに文字が表示されます</div>
+                </div>
+            </section>
+
+            <section class="action-area">
+                <div class="export-actions">
+                    <button class="action-btn" id="copyBtn" aria-label="クリップボードにコピー">
+                        <span class="material-icons">content_copy</span>
+                        コピー
+                    </button>
+                    <button class="action-btn" id="saveTxtBtn" aria-label="TXTファイルとして保存">
+                        <span class="material-icons">save</span>
+                        TXT
+                    </button>
+                    <button class="action-btn" id="saveDocxBtn" aria-label="DOCXファイルとして保存">
+                        <span class="material-icons">description</span>
+                        DOCX
+                    </button>
+                    <button class="action-btn" id="savePdfBtn" aria-label="PDFファイルとして保存">
+                        <span class="material-icons">picture_as_pdf</span>
+                        PDF
+                    </button>
+                    <button class="action-btn" id="saveMdBtn" aria-label="Markdownファイルとして保存">
+                        <span class="material-icons">smart_toy</span>
+                        AI用MD
+                    </button>
+                </div>
+                <div class="control-actions">
+                    <button class="action-btn danger" id="clearBtn" aria-label="すべてクリア">
+                        <span class="material-icons">delete</span>
+                        クリア
+                    </button>
+                    <button class="action-btn" id="newSessionBtn" aria-label="新規セッション">
+                        <span class="material-icons">add</span>
+                        新規セッション
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <div class="notice">
+            <h3>使用上の注意</h3>
+            <ul>
+                <li>静かな環境でご利用ください</li>
+                <li>はっきりと話してください</li>
+                <li>専門用語は認識率が下がる可能性があります</li>
+                <li>長時間の使用時は定期的に保存してください</li>
+            </ul>
+        </div>
+    </div>
+
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>設定</h2>
+                <button class="close-btn" aria-label="閉じる">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-item">
+                    <label for="themeToggle">
+                        <span class="material-icons">dark_mode</span>
+                        ダークモード
+                    </label>
+                    <input type="checkbox" id="themeToggle" class="toggle-switch">
+                </div>
+                <div class="setting-item">
+                    <label for="fontSizeSlider">
+                        <span class="material-icons">text_fields</span>
+                        文字サイズ
+                    </label>
+                    <input type="range" id="fontSizeSlider" min="14" max="24" value="18" class="slider">
+                    <span id="fontSizeValue">18px</span>
+                </div>
+                <div class="setting-item">
+                    <label for="autoPunctuationToggle">
+                        <span class="material-icons">format_quote</span>
+                        句読点の自動挿入
+                    </label>
+                    <input type="checkbox" id="autoPunctuationToggle" class="toggle-switch">
+                </div>
+                <div class="setting-item">
+                    <label for="includeTimestampsToggle">
+                        <span class="material-icons">schedule</span>
+                        エクスポート時にタイムスタンプを含める
+                    </label>
+                    <input type="checkbox" id="includeTimestampsToggle" class="toggle-switch">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="errorBanner" class="error-banner hidden">
+        <span class="material-icons">error</span>
+        <span id="errorMessage"></span>
+        <button class="error-close" aria-label="エラーを閉じる">
+            <span class="material-icons">close</span>
+        </button>
+    </div>
+
+    <div id="helpModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>キーボードショートカット</h2>
+                <button class="close-btn" id="closeHelpBtn" aria-label="閉じる">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="shortcut-list">
+                    <div class="shortcut-item">
+                        <kbd>Space</kbd>
+                        <span>録音開始/停止</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Ctrl</kbd> + <kbd>F</kbd>
+                        <span>検索</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Ctrl</kbd> + <kbd>Z</kbd>
+                        <span>元に戻す</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Ctrl</kbd> + <kbd>Y</kbd>
+                        <span>やり直す</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Ctrl</kbd> + <kbd>C</kbd>
+                        <span>コピー（選択中のテキスト）</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Ctrl</kbd> + <kbd>S</kbd>
+                        <span>TXTファイルとして保存</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Ctrl</kbd> + <kbd>N</kbd>
+                        <span>新規セッション</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>?</kbd>
+                        <span>このヘルプを表示</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="liveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="https://unpkg.com/docx@7.8.2/build/index.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
